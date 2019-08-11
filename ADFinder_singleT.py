@@ -113,10 +113,11 @@ except:
 	sys.exit(2)
 #######################################################################
 if ((gzinf1 and gzinf2) or ref_file):
-	print("Unwrap fastq file and reference file")
+	
 	temfile=outfolder + '/' + 'filtered_reads.fq'
 	out1=open(temfile,"w")
 	if gzinf1 and gzinf2:
+		print("Unwrap fastq file and reference file")
 		list_inf_s1=gzinf1.strip().split(",")
 		list_inf_s2=gzinf2.strip().split(",")
 		if len(list_inf_s1)!=len(list_inf_s2):
@@ -212,7 +213,7 @@ if infa_file:
 	os.system(bowtie2_cmd2)
 	final_outfile=outfile
 #######################################################################
-if sam_file and not(gzinf1 and gzinf2) and not(ref_file):
+if sam_file and not(gzinf1 and gzinf2) and not(ref_file) and not(infa_file):
 	final_outfile=sam_file
 ###################################################################################
 
@@ -221,7 +222,6 @@ print("Samfile generated, time used:",t_elapsed)
 
 print("Reading SAM file...")
 ###################################################################################
-inf_sam1=open(final_outfile)
 # out1_file=outfolder + '/' + 'output.splice'
 # out2_file=outfolder + '/' + 'output.uncompleted.splice'
 out_ins_file=outfolder + '/' + 'output.insertion.tab'
@@ -236,12 +236,18 @@ dict_rec_l=dict()
 dict_rec_r=dict()
 dict_rec_d=dict()
 dict_rec_m=dict()
-inf_splice=list()
+del_splice=list()
+ins_splice=list()
 inf_unsplice=list()
+###################################################################################
 print("data preparation finished")
 print("Reading SAM file finished")
-print("Alternative splicing search part 1")
-for line in inf_sam1:
+
+t_elapsed = (time.clock() - t_start)
+print("Time used:",t_elapsed)
+
+print("Generate small insertions and deletions, build ini-hash table")
+for line in open(final_outfile):
 	mobj=re.search("(.*?)\t.*?\t(.*?)\t(.*?)\t.*?\t(.*?)\t.*?\t.*?\t.*?\t(.*?)\t",line)
 	if mobj:
 		tag_r=mobj.group(1)
@@ -262,7 +268,7 @@ for line in inf_sam1:
 				start=pos_m+m_size
 				end=pos_m+m_size+ins_size-1
 				this_line="deletion_S_S\t%s\t%s\t%d\t%s\t%s\t%s" % (tag_c,tag_r,pos_m,cigar,seq_r,alter_seq)
-				inf_splice.append(this_line)
+				del_splice.append(this_line)
 				#print ("deletion_S_S\t%s\t%s\t%d\t%s\t%s\t%s" % (tag_c,tag_r,pos_m,cigar,seq_r,alter_seq),file=out1e)
 		if mobj4:#long read
 			m_size=int(mobj4.group(1))
@@ -271,7 +277,7 @@ for line in inf_sam1:
 				insert_point=pos_m+m_size-1
 				alter_seq=seq_r[m_size:m_size+ins_size]
 				this_line="insertion_S_S\t%s\t%s\t%d\t%s\t%s\t%s" % (tag_c,tag_r,pos_m,cigar,seq_r,alter_seq)
-				inf_splice.append(this_line)
+				ins_splice.append(this_line)
 				#print ("insertion_S_S\t%s\t%s\t%d\t%s\t%s\t%s" % (tag_c,tag_r,pos_m,cigar,seq_r,alter_seq),file=out1e)
 		if mobj1:
 			n1=int(mobj1.group(1))
@@ -286,7 +292,7 @@ for line in inf_sam1:
 			for i in range(pos_m,pos_m+n3):
 				addnum2dict(dict_rec_m,tag_c,i)
 ##################################################################
-del inf_sam1
+
 print("Data structure initiation for large deletions")
 for key1 in dict_rec_d:
 	list_keys=list(dict_rec_d[key1].keys())
@@ -354,14 +360,79 @@ for key1 in dict_rec_d:
 				if dis_lr>=0 and dis_lr<=10:#long read
 					alter_seq=seq_r[left2_list_M[i]:length_read_l-right2_list_M[j]+dis_lr]
 					this_line="insertion_S_T\t%s\t%s\t%d\t%d\t%s\t%s\t%s\t%s\t%d" % (key1,left2_list_tag[i],left2_list_pos[i],right2_list_pos[j],left2_list_cigar[i],right2_list_cigar[j],left2_list_seq[i],alter_seq,dis_lr)
-					inf_splice.append(this_line)
+					ins_splice.append(this_line)
 					#print ("insertion_S_T\t%s\t%s\t%d\t%d\t%s\t%s\t%s\t%s\t%d" % (key1,left2_list_tag[i],left2_list_pos[i],right2_list_pos[j],left2_list_cigar[i],right2_list_cigar[j],left2_list_seq[i],alter_seq,dis_lr),file=out1e)
 				if dis_lr<0 and dis_2<=10 and dis_2>=0:#long ref
 					alter_seq=dict_chr[key1][left2_list_pos[i]+left2_list_M[i]-1:right2_list_pos[j]-1+dis_2]
 					this_line="deletion_S_T\t%s\t%s\t%d\t%d\t%s\t%s\t%s\t%s\t%d" % (key1,left2_list_tag[i],left2_list_pos[i],right2_list_pos[j],left2_list_cigar[i],right2_list_cigar[j],left2_list_seq[i],alter_seq,dis_2)
-					inf_splice.append(this_line)
+					del_splice.append(this_line)
 					#print ("deletion_S_T\t%s\t%s\t%d\t%d\t%s\t%s\t%s\t%s\t%d" % (key1,left2_list_tag[i],left2_list_pos[i],right2_list_pos[j],left2_list_cigar[i],right2_list_cigar[j],left2_list_seq[i],alter_seq,dis_2),file=out1e)
+print("Releasing deletion RAM")
 del dict_rec_d
+del_dict=dict()
+del_num_dict=dict()
+print("Calculate coverage of deletions")
+for line in del_splice:
+	mobj2=re.search("deletion_S_S",line)
+	mobj4=re.search("deletion_S_T",line)
+	if mobj2:
+		m1=re.match(".*?\t(.*?)\t.*?\t(.*?)\t(\d+)M(\d+)D\d+M\t.*?\t(.*)",line)
+		tag_c=m1.group(1)
+		pos_m=m1.group(2)
+		m_size=m1.group(3)
+		ins_size=m1.group(4)
+		seq=m1.group(5)
+		start=int(pos_m)+int(m_size)
+		end=int(pos_m)+int(m_size)+int(ins_size)-1
+		this_key=str(start)+'_'+str(end)
+		addword2dict2(del_dict,tag_c,this_key,seq)
+		addnum2dict(del_num_dict,tag_c,this_key)
+	elif mobj4:
+		m1=re.match(".*?\t(.*?)\t.*?\t(.*?)\t(.*?)\t(\d+)M\d+S\t\d+S(\d+)M\t.*?\t(.*?)\t(.*)",line)
+		tag_c=m1.group(1)
+		l_pos=m1.group(2)
+		r_pos=m1.group(3)
+		lm=m1.group(4)
+		rm=m1.group(5)
+		seq=m1.group(6)
+		start=int(l_pos)+int(lm)
+		ins_size=len(seq)
+		end=start+ins_size-1
+		this_key=str(start)+'_'+str(end)
+		addword2dict2(del_dict,tag_c,this_key,seq)
+		addnum2dict(del_num_dict,tag_c,this_key)
+num_del=0
+del del_splice
+print("Output deletions")
+print("tag\tchromosome\tstart\tend\tsequence\tlength\tsplicing_depth\tnon_splicing_depth\tpossibility",file=out_del)
+for key1 in del_dict:
+	for key2 in del_dict[key1]:
+		if del_dict[key1][key2]!='' and del_num_dict[key1][key2]>=2:
+			num_del+=1
+			mobj2=re.match("(\d+)_(\d+)",key2)
+			pos1=int(mobj2.group(1))
+			sumi=0
+			numi=0
+			meani=0
+			if key1 in dict_rec_m:
+				for i in range(pos1-15,pos1+15):
+					if i in dict_rec_m[key1]:
+						sumi+=dict_rec_m[key1][i]
+						numi+=1
+					else:
+						numi+=1
+				meani=sumi/numi
+			else:
+				meani=0
+			possibility_splicing=del_num_dict[key1][key2]/(del_num_dict[key1][key2]+meani)
+			#print("D%d\t%s\t%s\t%s\t%s\t%d\t%d\t%3f" % (num_del,key1,mobj2.group(1),mobj2.group(2),del_dict[key1][key2],len(del_dict[key1][key2]),del_num_dict[key1][key2],meani),file=out_del)
+			print("D%d\t%s\t%d\t%d\t%s\t%d\t%d\t%3f\t%3f" % (num_del,key1,int(mobj2.group(1)),int(mobj2.group(2)),del_dict[key1][key2],len(del_dict[key1][key2]),del_num_dict[key1][key2],meani,possibility_splicing),file=out_del)
+
+t_elapsed = (time.clock() - t_start)
+print("Time used:",t_elapsed)
+out_del.close()
+del del_dict
+del del_num_dict
 ###############################################################################
 print("Searching for large insertions")
 for key1 in dict_rec_l:
@@ -398,7 +469,7 @@ for key1 in dict_rec_l:
 								alter_seq=find_overlap(seq_r_l,seq_r_r,pos_m_l,pos_m_r,MS_M,SM_S,dis_lr1,length_read_l,length_read_r)
 								if not alter_seq=='0':
 									this_line="insertion_M\t%s\t%s\t%s\t%d\t%d\t%s\t%s\t%s\t%s\t%s\t%d" % (key1,key2_1,key2_2,pos_m_l,pos_m_r,cigar_l,cigar_r,seq_r_l,seq_r_r,alter_seq,dis_lr1)
-									inf_splice.append(this_line)
+									ins_splice.append(this_line)
 									#print ("insertion_M\t%s\t%s\t%s\t%d\t%d\t%s\t%s\t%s\t%s\t%s\t%d" % (key1,key2_1,key2_2,pos_m_l,pos_m_r,cigar_l,cigar_r,seq_r_l,seq_r_r,alter_seq,dis_lr1),file=out1e)
 									dict_rec_r[key1].pop(key2_2)
 									break
@@ -407,10 +478,80 @@ for key1 in dict_rec_l:
 										this_line="%s\t%d\t%d\t%s\t%s"%(key1,pos_m_l+MS_M,pos_m_r,key2_1,key2_2)
 										inf_unsplice.append(this_line)
 										#print ("%s\t%d\t%d\t%s\t%s"%(key1,pos_m_l+MS_M,pos_m_r,key2_1,key2_2),file=out2e)
-print("Releasing RAM")
+print("Releasing insertion RAM")
 del dict_rec_l
 del dict_rec_r
-
+print("Calculate coverage of insertions")
+ins_dict=dict()
+ins_num_dict=dict()
+for line in ins_splice:
+	mobj1=re.search("insertion_S_S",line)
+	mobj3=re.search("insertion_S_T",line)
+	mobj5=re.search("insertion_M",line)
+	if mobj1:
+		m1=re.match(".*?\t(.*?)\t.*?\t(.*?)\t(\d+)M(\d+)I\d+M\t.*?\t(.*)",line)
+		tag_c=m1.group(1)
+		pos_m=m1.group(2)
+		m_size=m1.group(3)
+		ins_size=m1.group(4)
+		seq=m1.group(5)
+		insert_point=int(pos_m)+int(m_size)-1
+		this_key=str(insert_point)+'_'+ins_size
+		addword2dict2(ins_dict,tag_c,this_key,seq)
+		addnum2dict(ins_num_dict,tag_c,this_key)
+	elif mobj3:
+		m1=re.match(".*?\t(.*?)\t.*?\t(.*?)\t(.*?)\t(\d+)M\d+S\t\d+S(\d+)M\t.*?\t(.*?)\t.*",line)
+		tag_c=m1.group(1)
+		l_pos=m1.group(2)
+		r_pos=m1.group(3)
+		lm=m1.group(4)
+		rm=m1.group(5)
+		seq=m1.group(6)
+		insert_point=int(l_pos)+int(lm)-1
+		ins_size=len(seq)
+		this_key=str(insert_point)+'_'+str(ins_size)
+		addword2dict2(ins_dict,tag_c,this_key,seq)
+		addnum2dict(ins_num_dict,tag_c,this_key)
+	elif mobj5:
+		m1=re.match(".*?\t(.*?)\t.*?\t.*?\t(.*?)\t(.*?)\t(\d+)M\d+S\t\d+S(\d+)M\t.*?\t.*?\t(.*?)\t.*",line)
+		tag_c=m1.group(1)
+		l_pos=m1.group(2)
+		r_pos=m1.group(3)
+		lm=m1.group(4)
+		rm=m1.group(5)
+		seq=m1.group(6)
+		insert_point=int(l_pos)+int(lm)-1
+		ins_size=len(seq)
+		this_key=str(insert_point)+'_'+str(ins_size)
+		addword2dict2(ins_dict,tag_c,this_key,seq)
+		addnum2dict(ins_num_dict,tag_c,this_key)
+num_ins=0
+del ins_splice
+print("Output insertions")
+print("tag\tchromosome\tposition\tsequence\tlength\tsplicing_depth\tnon_splicing_depth",file=out_ins)
+for key1 in ins_dict:
+	for key2 in ins_dict[key1]:
+		if ins_dict[key1][key2]!='' and ins_num_dict[key1][key2]>=2:
+			num_ins+=1
+			mobj1=re.match("(\d+)_(\d+)",key2)
+			pos1=int(mobj1.group(1))
+			sumi=0
+			numi=0
+			meani=0
+			if key1 in dict_rec_m:
+				for i in range(pos1-15,pos1+15):
+					if i in dict_rec_m[key1]:
+						sumi+=dict_rec_m[key1][i]
+						numi+=1
+					else:
+						numi+=1
+				meani=sumi/numi
+			else:
+				meani=0
+			possibility_splicing=ins_num_dict[key1][key2]/(ins_num_dict[key1][key2]+meani)
+			#print("I%d\t%s\t%s\t%s\t%d\t%d\t%3f" % (num_ins,key1,mobj1.group(1),ins_dict[key1][key2],len(ins_dict[key1][key2]),ins_num_dict[key1][key2],meani),file=out_ins)
+			print("I%d\t%s\t%d\t%s\t%d\t%d\t%3f\t%3f" % (num_ins,key1,int(mobj1.group(1)),ins_dict[key1][key2],len(ins_dict[key1][key2]),ins_num_dict[key1][key2],meani,possibility_splicing),file=out_ins)
+out_ins.close()
 t_elapsed = (time.clock() - t_start)
 print("Time used:",t_elapsed)
 
@@ -428,11 +569,6 @@ for line in inf_unsplice:
 num_uncom=0
 print("tag\tchromosome\tposition\tsplicing_depth\tnon_splicing_depth",file=out_uncom)
 for key1 in uncom_num_dict:
-	mobj_key=re.match("(.*)_(\d+)_(\d+)_(\d+)",key1)
-	ori_key=mobj_key.group(1)
-	num_key=mobj_key.group(2)
-	start_key=int(mobj_key.group(3))
-	end_key=int(mobj_key.group(4))
 	for key2 in uncom_num_dict[key1]:
 		if uncom_num_dict[key1][key2]>=5:
 			num_uncom+=1
@@ -442,7 +578,7 @@ for key1 in uncom_num_dict:
 			numi=0
 			meani=0
 			if key1 in dict_rec_m:
-				for i in range(pos1-5,pos1+5):
+				for i in range(pos1-15,pos1+15):
 					if i in dict_rec_m[key1]:
 						sumi+=dict_rec_m[key1][i]
 						numi+=1
@@ -452,158 +588,8 @@ for key1 in uncom_num_dict:
 			else:
 				meani=0
 			#print("I%d\t%s\t%s\t%s\t%d\t%d\t%3f" % (num_ins,key1,mobj1.group(1),ins_dict[key1][key2],len(ins_dict[key1][key2]),ins_num_dict[key1][key2],meani),file=out_ins)
-			print("I_U%d\t%s\t%d\t%d\t%3f" % (num_uncom,ori_key,int(mobj1.group(1))+start_key-1,uncom_num_dict[key1][key2],meani),file=out_uncom)
-
-t_elapsed = (time.clock() - t_start)
-print("Splicing file generated, time used:",t_elapsed)
-# if splice_file and sam_file:
-	# inf_sam=open(sam_file)
-	# dict_rec_m=dict()
-	# for line in inf_sam:
-		# mobj=re.search("(.*?)\t.*?\t(.*?)\t(.*?)\t.*?\t(.*?)\t.*?\t.*?\t.*?\t(.*?)\t",line)
-		# if mobj:
-			# tag_r=mobj.group(1)
-			# tag_c=mobj.group(2)
-			# pos_m=int(mobj.group(3))
-			# cigar=mobj.group(4)
-			# seq_r=mobj.group(5)
-			# mobj5=re.match("(\d+)M$",cigar)
-			# if mobj5:#total coverage count
-				# n3=int(mobj5.group(1))
-				# for i in range(pos_m,pos_m+n3):
-					# addnum2dict(dict_rec_m,tag_c,i)
-	# del inf_sam
-	# inf_splice=open(splice_file)
-	# out_ins_file=outfolder + '/' + 'output.insertion.tab'
-	# out_del_file=outfolder + '/' + 'output.deletion.tab'
-	# out_ins=open(out_ins_file,"w")
-	# out_del=open(out_del_file,"w")
-
-
-ins_dict=dict()
-ins_num_dict=dict()
-del_dict=dict()
-del_num_dict=dict()
-print("Building hash-like data structure of output data")
-#build hash-like data structure of output data
-for line in inf_splice:
-	mobj1=re.search("insertion_S_S",line)
-	mobj2=re.search("deletion_S_S",line)
-	mobj3=re.search("insertion_S_T",line)
-	mobj4=re.search("deletion_S_T",line)
-	mobj5=re.search("insertion_M",line)
-	if mobj1:
-		m1=re.match(".*?\t(.*?)\t.*?\t(.*?)\t(\d+)M(\d+)I\d+M\t.*?\t(.*)",line)
-		tag_c=m1.group(1)
-		pos_m=m1.group(2)
-		m_size=m1.group(3)
-		ins_size=m1.group(4)
-		seq=m1.group(5)
-		insert_point=int(pos_m)+int(m_size)-1
-		this_key=str(insert_point)+'_'+ins_size
-		addword2dict2(ins_dict,tag_c,this_key,seq)
-		addnum2dict(ins_num_dict,tag_c,this_key)
-	elif mobj2:
-		m1=re.match(".*?\t(.*?)\t.*?\t(.*?)\t(\d+)M(\d+)D\d+M\t.*?\t(.*)",line)
-		tag_c=m1.group(1)
-		pos_m=m1.group(2)
-		m_size=m1.group(3)
-		ins_size=m1.group(4)
-		seq=m1.group(5)
-		start=int(pos_m)+int(m_size)
-		end=int(pos_m)+int(m_size)+int(ins_size)-1
-		this_key=str(start)+'_'+str(end)
-		addword2dict2(del_dict,tag_c,this_key,seq)
-		addnum2dict(del_num_dict,tag_c,this_key)
-	elif mobj3:
-		m1=re.match(".*?\t(.*?)\t.*?\t(.*?)\t(.*?)\t(\d+)M\d+S\t\d+S(\d+)M\t.*?\t(.*?)\t.*",line)
-		tag_c=m1.group(1)
-		l_pos=m1.group(2)
-		r_pos=m1.group(3)
-		lm=m1.group(4)
-		rm=m1.group(5)
-		seq=m1.group(6)
-		insert_point=int(l_pos)+int(lm)-1
-		ins_size=len(seq)
-		this_key=str(insert_point)+'_'+str(ins_size)
-		addword2dict2(ins_dict,tag_c,this_key,seq)
-		addnum2dict(ins_num_dict,tag_c,this_key)
-	elif mobj4:
-		m1=re.match(".*?\t(.*?)\t.*?\t(.*?)\t(.*?)\t(\d+)M\d+S\t\d+S(\d+)M\t.*?\t(.*?)\t(.*)",line)
-		tag_c=m1.group(1)
-		l_pos=m1.group(2)
-		r_pos=m1.group(3)
-		lm=m1.group(4)
-		rm=m1.group(5)
-		seq=m1.group(6)
-		start=int(l_pos)+int(lm)
-		ins_size=len(seq)
-		end=start+ins_size-1
-		this_key=str(start)+'_'+str(end)
-		addword2dict2(del_dict,tag_c,this_key,seq)
-		addnum2dict(del_num_dict,tag_c,this_key)
-	elif mobj5:
-		m1=re.match(".*?\t(.*?)\t.*?\t.*?\t(.*?)\t(.*?)\t(\d+)M\d+S\t\d+S(\d+)M\t.*?\t.*?\t(.*?)\t.*",line)
-		tag_c=m1.group(1)
-		l_pos=m1.group(2)
-		r_pos=m1.group(3)
-		lm=m1.group(4)
-		rm=m1.group(5)
-		seq=m1.group(6)
-		insert_point=int(l_pos)+int(lm)-1
-		ins_size=len(seq)
-		this_key=str(insert_point)+'_'+str(ins_size)
-		addword2dict2(ins_dict,tag_c,this_key,seq)
-		addnum2dict(ins_num_dict,tag_c,this_key)
-del inf_splice
-num_ins=0
-num_del=0
-print("tag\tchromosome\tposition\tsequence\tlength\tsplicing_depth\tnon_splicing_depth",file=out_ins)
-for key1 in ins_dict:
-	for key2 in ins_dict[key1]:
-		if ins_dict[key1][key2]!='' and ins_num_dict[key1][key2]>=2:
-			num_ins+=1
-			mobj1=re.match("(\d+)_(\d+)",key2)
-			pos1=int(mobj1.group(1))
-			sumi=0
-			numi=0
-			meani=0
-			if key1 in dict_rec_m:
-				for i in range(pos1-5,pos1+5):
-					if i in dict_rec_m[key1]:
-						sumi+=dict_rec_m[key1][i]
-						numi+=1
-					else:
-						numi+=1
-				meani=sumi/numi
-			else:
-				meani=0
-			possibility_splicing=ins_num_dict[key1][key2]/(ins_num_dict[key1][key2]+meani)
-			#print("I%d\t%s\t%s\t%s\t%d\t%d\t%3f" % (num_ins,key1,mobj1.group(1),ins_dict[key1][key2],len(ins_dict[key1][key2]),ins_num_dict[key1][key2],meani),file=out_ins)
-			print("I%d\t%s\t%d\t%s\t%d\t%d\t%3f\t%3f" % (num_ins,key1,int(mobj1.group(1)),ins_dict[key1][key2],len(ins_dict[key1][key2]),ins_num_dict[key1][key2],meani,possibility_splicing),file=out_ins)
-print("tag\tchromosome\tstart\tend\tsequence\tlength\tsplicing_depth\tnon_splicing_depth\tpossibility",file=out_del)
-for key1 in del_dict:
-	for key2 in del_dict[key1]:
-		if del_dict[key1][key2]!='' and del_num_dict[key1][key2]>=2:
-			num_del+=1
-			mobj2=re.match("(\d+)_(\d+)",key2)
-			pos1=int(mobj2.group(1))
-			sumi=0
-			numi=0
-			meani=0
-			if key1 in dict_rec_m:
-				for i in range(pos1-5,pos1+5):
-					if i in dict_rec_m[key1]:
-						sumi+=dict_rec_m[key1][i]
-						numi+=1
-					else:
-						numi+=1
-				meani=sumi/numi
-			else:
-				meani=0
-			possibility_splicing=del_num_dict[key1][key2]/(del_num_dict[key1][key2]+meani)
-			#print("D%d\t%s\t%s\t%s\t%s\t%d\t%d\t%3f" % (num_del,key1,mobj2.group(1),mobj2.group(2),del_dict[key1][key2],len(del_dict[key1][key2]),del_num_dict[key1][key2],meani),file=out_del)
-			print("D%d\t%s\t%d\t%d\t%s\t%d\t%d\t%3f\t%3f" % (num_del,key1,int(mobj2.group(1)),int(mobj2.group(2)),del_dict[key1][key2],len(del_dict[key1][key2]),del_num_dict[key1][key2],meani,possibility_splicing),file=out_del)
+			print("I_U%d\t%s\t%d\t%d\t%3f" % (num_uncom,key1,int(mobj1.group(1)),uncom_num_dict[key1][key2],meani),file=out_uncom)
+del inf_unsplice
 
 t_elapsed = (time.clock() - t_start)
 print("Finish, time used:",t_elapsed)
