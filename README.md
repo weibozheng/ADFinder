@@ -9,7 +9,8 @@ Biopython.
 You can install these modules by: "pip install bio ".  
 
 ## Usage
-ADFinder.py -x \<genome reference in fasta format> [--s1 <paired-end reads 1> --s2 <paired-end reads 2>]|[-U <Unpaired reads>]|[-S sam file] -o <output folder>
+ADFinder.py **-x** \<genome reference in fasta format\> [**--s1** \<paired-end reads 1\> **--s2** \<paired-end reads 2\>]
+|[**-U** <Unpaired reads>]\|\[**-S** sam file] **-o** \<output folder\>
 
 **One example:**  
   "python ADFinder_singleT.py -p 4 -x f1.fasta --s1 f1.left.fq.gz,f2.left.fq.gz,... --s2 f1.right.fq.gz,f2.left.fq.gz,... -U unpaired.fq.gz,... -o folder_output  
