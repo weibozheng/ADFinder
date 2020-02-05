@@ -13,9 +13,9 @@ ADFinder.py **-x** \<genome reference in fasta format\> [**--s1** \<paired-end r
 |[**-U** \<unpaired reads\>]\|\[**-S** \<sam file\>] **-o** \<output folder\>
 
 **One example:**  
-  "python ADFinder_singleT.py -p 4 -x f1.fasta --s1 f1.left.fq.gz,f2.left.fq.gz,... --s2 f1.right.fq.gz,f2.left.fq.gz,... -U unpaired.fq.gz,... -o folder_output  
+  "python ADFinder.py -p 4 -x f1.fasta --s1 f1.left.fq.gz,f2.left.fq.gz,... --s2 f1.right.fq.gz,f2.left.fq.gz,... -U unpaired.fq.gz,... -o folder_output  
 or:  
-"python ADFinder_singleT.py -p 4 -x f1.fasta -S mapping.sam -o folder_output"  
+"python ADFinder.py -p 4 -x f1.fasta -S mapping.sam -o folder_output"  
 
 ## output files 
 "output.deletion.tab": a nine-column file recording all deletion events;
